@@ -7,6 +7,7 @@ import { registerOAuthRoutes } from "./oauth";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
+import { getMarkets } from "../db";
 
 function isPortAvailable(port: number): Promise<boolean> {
   return new Promise(resolve => {
@@ -60,6 +61,17 @@ async function startServer() {
   server.listen(port, () => {
     console.log(`Server running on http://localhost:${port}/`);
   });
+
+  // Temporary: quick sanity check that the DB connection and getMarkets() work.
+  // Remove this once you're done with the test.
+  (async () => {
+    try {
+      const markets = await getMarkets();
+      console.log("Markets test:", markets);
+    } catch (error) {
+      console.error("Failed to fetch markets:", error);
+    }
+  })();
 }
 
 startServer().catch(console.error);
