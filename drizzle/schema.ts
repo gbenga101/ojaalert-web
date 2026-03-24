@@ -1,4 +1,4 @@
-import { pgTable, text, timestamp, uuid, numeric, integer, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, uuid, numeric, integer, uniqueIndex, index, date } from "drizzle-orm/pg-core";
 import { relations } from "drizzle-orm";
 
 /**
@@ -19,7 +19,8 @@ export const markets = pgTable(
     marketType: text("market_type"),
     cycleLength: integer("cycle_length"),
     cyclePosition: integer("cycle_position"),
-    referenceDate: timestamp("reference_date"),
+    // Supabase column is DATE (no time). Keep as string to avoid timezone shifts.
+    referenceDate: date("reference_date", { mode: "string" }),
     imageUrl: text("image_url"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },

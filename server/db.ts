@@ -74,7 +74,12 @@ export async function getMarkets() {
   const db = await getDb();
   if (!db) return [];
   const { markets } = await import("../drizzle/schema");
-  return db.select().from(markets);
+  const rows = await db.select().from(markets);
+  return rows.map(row => ({
+    ...row,
+    // Keep DATE as plain YYYY-MM-DD string (no time)
+    referenceDate: row.referenceDate ?? null,
+  }));
 }
 
 // Commodity queries

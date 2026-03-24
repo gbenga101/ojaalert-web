@@ -16,22 +16,34 @@ export default function Markets() {
     city: cityFilter || undefined,
     state: stateFilter || undefined,
   });
-
+  
   // Calculate next market day for rotational markets
   const calculateNextMarketDay = (market: typeof markets[0]) => {
-    if (market.marketType !== "rotational" || !market.referenceDate || !market.cycleLength) {
-      return null;
-    }
-    
-    const refDate = new Date(market.referenceDate);
-    const today = new Date();
-    const daysDiff = Math.floor((today.getTime() - refDate.getTime()) / (1000 * 60 * 60 * 24));
-    const daysUntilNext = market.cycleLength - (daysDiff % market.cycleLength);
-    
-    const nextDate = new Date(today);
-    nextDate.setDate(nextDate.getDate() + daysUntilNext);
-    return nextDate;
-  };
+  if (
+    market.marketType !== "rotational" ||
+    !market.referenceDate ||
+    !market.cycleLength
+  ) {
+    return null;
+  }
+
+  // referenceDate is a YYYY-MM-DD string
+  const refDate = new Date(`${market.referenceDate}T00:00:00Z`);
+  if (isNaN(refDate.getTime())) return null;
+  const today = new Date();
+
+  const daysDiff = Math.floor(
+    (today.getTime() - refDate.getTime()) / (1000 * 60 * 60 * 24)
+  );
+
+  const daysUntilNext =
+    market.cycleLength - (daysDiff % market.cycleLength);
+
+  const nextDate = new Date(today);
+  nextDate.setDate(today.getDate() + daysUntilNext);
+
+  return nextDate;
+};
 
   return (
     <div className="min-h-screen bg-slate-50">
