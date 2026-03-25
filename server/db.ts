@@ -77,6 +77,8 @@ export async function getMarkets() {
   const rows = await db.select().from(markets);
   return rows.map(row => ({
     ...row,
+    latitude: row.latitude != null ? Number(row.latitude) : null,
+    longitude: row.longitude != null ? Number(row.longitude) : null,
     // Keep DATE as plain YYYY-MM-DD string (no time)
     referenceDate: row.referenceDate ?? null,
   }));
