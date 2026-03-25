@@ -31,14 +31,18 @@ export default function Markets() {
   const refDate = new Date(`${market.referenceDate}T00:00:00Z`);
   if (isNaN(refDate.getTime())) return null;
   const today = new Date();
+  today.setHours(0,0,0,0);
 
   const daysDiff = Math.floor(
     (today.getTime() - refDate.getTime()) / (1000 * 60 * 60 * 24)
   );
 
-  const daysUntilNext =
-    market.cycleLength - (daysDiff % market.cycleLength);
+  const remainder = daysDiff % market.cycleLength;
 
+  const daysUntilNext = remainder === 0
+    ? 0
+    : market.cycleLength - remainder;
+  
   const nextDate = new Date(today);
   nextDate.setDate(today.getDate() + daysUntilNext);
 
@@ -103,13 +107,20 @@ export default function Markets() {
                             {market.city}, {market.state}
                           </CardDescription>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                          market.marketType === "rotational" 
-                            ? "bg-orange-100 text-orange-800" 
-                            : "bg-green-100 text-green-800"
-                        }`}>
-                          {market.marketType === "rotational" ? "Rotational" : "Daily"}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          {market.isActiveToday && (
+                            <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">
+                              Active Today
+                            </span>
+                          )}
+                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                            market.marketType === "rotational" 
+                              ? "bg-orange-100 text-orange-800" 
+                              : "bg-green-100 text-green-800"
+                          }`}>
+                            {market.marketType === "rotational" ? "Rotational" : "Daily"}
+                          </span>
+                        </div>
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
