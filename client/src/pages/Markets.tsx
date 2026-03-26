@@ -5,11 +5,13 @@ import { Input } from "@/components/ui/input";
 import { MapPin, Calendar, AlertCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
+import { useLocation } from "wouter";
 
 export default function Markets() {
   const { isAuthenticated } = useAuth();
   const [cityFilter, setCityFilter] = useState("");
   const [stateFilter, setStateFilter] = useState("");
+  const [, navigate] = useLocation();
   
   // Fetch all markets
   const { data: markets = [], isLoading } = trpc.markets.list.useQuery({
