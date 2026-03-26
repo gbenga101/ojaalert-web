@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { drizzle as createDrizzle } from "drizzle-orm/node-postgres";
 import { profiles } from "../drizzle/schema";
+import { ENV } from './_core/env';
 import { Pool } from "pg";
 
 let _db: ReturnType<typeof createDrizzle> | null = null;
@@ -28,30 +29,25 @@ export async function getProfileById(id: string) {
     console.warn("[Database] Cannot get profile: database not available");
     return undefined;
   }
+
   const result = await db.select().from(profiles).where(eq(profiles.id, id)).limit(1);
+
   return result.length > 0 ? result[0] : undefined;
 }
 
-// Look up a profile by their Supabase auth user ID
+// Auth functions for Supabase
 export async function getUserByOpenId(openId: string) {
   const db = await getDb();
   if (!db) {
     console.warn("[Database] Cannot get user: database not available");
     return undefined;
   }
+
   const result = await db.select().from(profiles).where(eq(profiles.id, openId)).limit(1);
   return result.length > 0 ? result[0] : undefined;
 }
 
-// Safety net: insert the profile if the Supabase trigger hasn't run yet.
-// ON CONFLICT DO NOTHING means this is always safe to call.
-export async function upsertUser(user: {
-  openId: string;
-  name?: string | null;
-  email?: string | null;
-  loginMethod?: string | null;
-  lastSignedIn?: Date;
-}) {
+export async function upsertUser(user: { openId: string; name?: string | null; email?: string | null; loginMethod?: string | null; lastSignedIn?: Date }) {
   const db = await getDb();
   if (!db) {
     console.warn("[Database] Cannot upsert user: database not available");
@@ -59,22 +55,21 @@ export async function upsertUser(user: {
   }
 
   try {
-    await db
-      .insert(profiles)
-      .values({
-        id: user.openId,
-        name: user.name ?? null,
-        role: "user",
-      })
-      .onConflictDoNothing();
+    // For Supabase, profiles are created when auth.users are created
+    // This function ensures the profile exists and updates it if needed
+    const existing = await db.select().from(profiles).where(eq(profiles.id, user.openId)).limit(1);
+    
+    if (existing.length === 0) {
+      // Profile doesn't exist yet, it should be created by Supabase auth trigger
+      console.log("[Database] Profile for user", user.openId, "not found. It should be created by auth trigger.");
+    }
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
   }
 }
 
-// ─── Market queries ───────────────────────────────────────────────────────────
-
+// Market queries
 export async function getMarkets() {
   const db = await getDb();
   if (!db) return [];
@@ -84,12 +79,12 @@ export async function getMarkets() {
     ...row,
     latitude: row.latitude != null ? Number(row.latitude) : null,
     longitude: row.longitude != null ? Number(row.longitude) : null,
+    // Keep DATE as plain YYYY-MM-DD string (no time)
     referenceDate: row.referenceDate ?? null,
   }));
 }
 
-// ─── Commodity queries ────────────────────────────────────────────────────────
-
+// Commodity queries
 export async function getCommodities() {
   const db = await getDb();
   if (!db) return [];
@@ -97,8 +92,9 @@ export async function getCommodities() {
   return db.select().from(commodities);
 }
 
-// ─── Vendor queries ───────────────────────────────────────────────────────────
+// TODO: add more feature queries here as your schema grows.
 
+// Vendor queries
 export async function getVendorByProfileId(profileId: string) {
   const db = await getDb();
   if (!db) return null;
@@ -115,8 +111,7 @@ export async function createVendor(data: { profileId: string; ownerName: string;
   return result[0];
 }
 
-// ─── Vendor Stores queries ────────────────────────────────────────────────────
-
+// Vendor Stores queries
 export async function getVendorStores(vendorId: string) {
   const db = await getDb();
   if (!db) return [];
@@ -124,13 +119,7 @@ export async function getVendorStores(vendorId: string) {
   return db.select().from(vendorStores).where(eq(vendorStores.vendorId, vendorId));
 }
 
-export async function createVendorStore(data: {
-  vendorId: string;
-  marketId: string;
-  storeName: string;
-  description?: string;
-  imageUrl?: string;
-}) {
+export async function createVendorStore(data: { vendorId: string; marketId: string; storeName: string; description?: string; imageUrl?: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { vendorStores } = await import("../drizzle/schema");
@@ -138,8 +127,7 @@ export async function createVendorStore(data: {
   return result[0];
 }
 
-// ─── Vendor Products queries ──────────────────────────────────────────────────
-
+// Vendor Products queries
 export async function getVendorProducts(vendorStoreId: string) {
   const db = await getDb();
   if (!db) return [];
@@ -154,17 +142,14 @@ export async function getVendorProductsByCommodity(commodityId: string) {
   return db.select().from(vendorProducts).where(eq(vendorProducts.commodityId, commodityId));
 }
 
-export async function createVendorProduct(data: {
-  vendorStoreId: string;
-  commodityId: string;
-  unitId: string;
-  currentPrice: string;
-  updatedBy: string;
-}) {
+export async function createVendorProduct(data: { vendorStoreId: string; commodityId: string; unitId: string; currentPrice: string; updatedBy: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { vendorProducts } = await import("../drizzle/schema");
-  const result = await db.insert(vendorProducts).values(data).returning();
+  const result = await db.insert(vendorProducts).values({
+    ...data,
+    currentPrice: data.currentPrice,
+  }).returning();
   return result[0];
 }
 
@@ -172,16 +157,14 @@ export async function updateVendorProductPrice(vendorProductId: string, currentP
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { vendorProducts } = await import("../drizzle/schema");
-  const result = await db
-    .update(vendorProducts)
+  const result = await db.update(vendorProducts)
     .set({ currentPrice, lastUpdated: new Date() })
     .where(eq(vendorProducts.id, vendorProductId))
     .returning();
   return result[0];
 }
 
-// ─── Price History queries ────────────────────────────────────────────────────
-
+// Price History queries
 export async function getPriceHistory(vendorProductId: string) {
   const db = await getDb();
   if (!db) return [];
@@ -189,8 +172,7 @@ export async function getPriceHistory(vendorProductId: string) {
   return db.select().from(priceHistory).where(eq(priceHistory.vendorProductId, vendorProductId));
 }
 
-// ─── Price Reports queries ────────────────────────────────────────────────────
-
+// Price Reports queries
 export async function createPriceReport(data: { vendorProductId: string; reportMessage: string }) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
