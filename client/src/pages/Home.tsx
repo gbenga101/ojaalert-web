@@ -3,21 +3,26 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MapPin, TrendingUp, Users, ShoppingCart } from "lucide-react";
-import { getLoginUrl } from "@/const";
+import { MapPin, TrendingUp, Users, ShoppingCart, LogOut } from "lucide-react";
 import { trpc } from "@/lib/trpc";
+import { supabase } from "@/lib/supabase";
 import { useState } from "react";
+import AuthModal from "@/components/AuthModal";
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
   const [cityFilter, setCityFilter] = useState("");
   const [marketTypeFilter, setMarketTypeFilter] = useState<"rotational" | "daily" | "">("" as any);
-  
-  // Fetch markets with filters
+  const [authModalOpen, setAuthModalOpen] = useState(false);
+
   const { data: markets = [], isLoading: marketsLoading } = trpc.markets.list.useQuery({
     city: cityFilter || undefined,
     marketType: marketTypeFilter || undefined,
   });
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 to-slate-100">
@@ -28,25 +33,39 @@ export default function Home() {
             <ShoppingCart className="w-8 h-8 text-blue-600" />
             <h1 className="text-2xl font-bold text-slate-900">OjaAlert</h1>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             {isAuthenticated ? (
-              <div className="text-sm text-slate-600">
-                Welcome, {user?.name || "User"}
-              </div>
+              <>
+                <span className="text-sm text-slate-600">
+                  {user?.email || "User"}
+                </span>
+                <Button variant="outline" size="sm" onClick={handleSignOut}>
+                  <LogOut className="w-4 h-4 mr-1" />
+                  Sign Out
+                </Button>
+              </>
             ) : (
-              <Button asChild>
-                <a href={getLoginUrl()}>Sign In</a>
+              <Button
+                className="bg-blue-600 hover:bg-blue-700"
+                onClick={() => setAuthModalOpen(true)}
+              >
+                Sign In
               </Button>
             )}
           </div>
         </div>
       </header>
 
+      {/* Auth Modal */}
+      <AuthModal open={authModalOpen} onClose={() => setAuthModalOpen(false)} />
+
       {/* Hero Section */}
       <section className="bg-blue-600 text-white py-12">
         <div className="container max-w-6xl mx-auto px-4">
           <h2 className="text-4xl font-bold mb-4">Discover Nigerian Markets & Compare Prices</h2>
-          <p className="text-lg text-blue-100">Find traditional markets, compare commodity prices, and track price trends in real-time</p>
+          <p className="text-lg text-blue-100">
+            Find traditional markets, compare commodity prices, and track price trends in real-time
+          </p>
         </div>
       </section>
 
@@ -60,7 +79,10 @@ export default function Home() {
               onChange={(e) => setCityFilter(e.target.value)}
               className="bg-slate-50"
             />
-            <Select value={marketTypeFilter || "all"} onValueChange={(v) => setMarketTypeFilter(v === "all" ? "" : (v as any))}>
+            <Select
+              value={marketTypeFilter || "all"}
+              onValueChange={(v) => setMarketTypeFilter(v === "all" ? "" : (v as any))}
+            >
               <SelectTrigger className="bg-slate-50">
                 <SelectValue placeholder="Market type" />
               </SelectTrigger>
@@ -79,7 +101,7 @@ export default function Home() {
       <section className="py-12">
         <div className="container max-w-6xl mx-auto px-4">
           <h3 className="text-2xl font-bold mb-6 text-slate-900">Featured Markets</h3>
-          
+
           {marketsLoading ? (
             <div className="text-center py-12 text-slate-500">Loading markets...</div>
           ) : markets.length === 0 ? (

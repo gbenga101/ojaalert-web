@@ -85,7 +85,15 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { resetForm(); onClose(); } }}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        if (!o) {
+          resetForm();
+          onClose();
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle className="text-center text-xl font-bold">
@@ -99,7 +107,7 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
             <TabsTrigger value="signup">Sign Up</TabsTrigger>
           </TabsList>
 
-          {/* Sign In */}
+          {/* ── Sign In ── */}
           <TabsContent value="signin" className="space-y-4 pt-2">
             <div className="space-y-2">
               <Label htmlFor="signin-email">Email</Label>
@@ -133,14 +141,7 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
               {loading ? "Signing in..." : "Sign In"}
             </Button>
 
-            <div className="relative my-2">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-slate-200" />
-              </div>
-              <div className="relative flex justify-center text-xs text-slate-400">
-                <span className="bg-white px-2">or continue with</span>
-              </div>
-            </div>
+            <Divider />
 
             <Button
               variant="outline"
@@ -153,7 +154,7 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
             </Button>
           </TabsContent>
 
-          {/* Sign Up */}
+          {/* ── Sign Up ── */}
           <TabsContent value="signup" className="space-y-4 pt-2">
             <div className="space-y-2">
               <Label htmlFor="signup-email">Email</Label>
@@ -173,7 +174,7 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
                 id="signup-password"
                 type="password"
                 placeholder="At least 6 characters"
-                value={email}
+                value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => handleKeyDown(e, handleSignUp)}
                 disabled={loading}
@@ -187,14 +188,7 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
               {loading ? "Creating account..." : "Create Account"}
             </Button>
 
-            <div className="relative my-2">
-              <div className="absolute inset-0 flex items-center">
-                <span className="w-full border-t border-slate-200" />
-              </div>
-              <div className="relative flex justify-center text-xs text-slate-400">
-                <span className="bg-white px-2">or continue with</span>
-              </div>
-            </div>
+            <Divider />
 
             <Button
               variant="outline"
@@ -213,6 +207,19 @@ export default function AuthModal({ open, onClose }: AuthModalProps) {
         </p>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function Divider() {
+  return (
+    <div className="relative my-2">
+      <div className="absolute inset-0 flex items-center">
+        <span className="w-full border-t border-slate-200" />
+      </div>
+      <div className="relative flex justify-center text-xs text-slate-400">
+        <span className="bg-white px-2">or continue with</span>
+      </div>
+    </div>
   );
 }
 
