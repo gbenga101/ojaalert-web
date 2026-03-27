@@ -4,8 +4,7 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
-import { registerOAuthRoutes } from "./oauth";
-import { appRouter } from "../routers";           // ← your routers.ts
+import { appRouter } from "../routers";
 import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { getMarkets } from "../db";
@@ -33,39 +32,27 @@ async function startServer() {
   const app = express();
   const server = createServer(app);
 
-  // Configure body parser
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
-  // OAuth routes
-  registerOAuthRoutes(app);
-
-  // tRPC API with centralized error logging
+  // tRPC API
   app.use(
     "/api/trpc",
     createExpressMiddleware({
       router: appRouter,
       createContext,
-
-      // ← THIS IS THE CORRECT PLACE FOR onError
-      onError({ error, type, path, input, ctx, req }) {
-        console.error(`[tRPC Error] ${type} ${path ?? 'unknown'}:`, {
+      onError({ error, type, path, ctx }) {
+        console.error(`[tRPC Error] ${type} ${path ?? "unknown"}:`, {
           code: error.code,
           message: error.message,
           cause: error.cause?.message,
           userId: ctx?.user?.id,
-          input: input ? JSON.stringify(input).slice(0, 200) : null, // prevent huge logs
         });
-
-        // Optional: Add Sentry, Logtail, etc. here later
-        // if (error.code === 'INTERNAL_SERVER_ERROR') {
-        //   // captureException(error);
-        // }
       },
     })
   );
 
-  // Vite or static files
+  // Vite (dev) or static files (prod)
   if (process.env.NODE_ENV === "development") {
     await setupVite(app, server);
   } else {
@@ -83,7 +70,7 @@ async function startServer() {
     console.log(`Server running on http://localhost:${port}/`);
   });
 
-  // Temporary DB sanity check (you can remove this later)
+  // DB sanity check
   (async () => {
     try {
       const markets = await getMarkets();
