@@ -77,8 +77,14 @@ export const appRouter = router({
     getById: publicProcedure
       .input(z.string().min(1))
       .query(async ({ input }) => {
-        const commodities = await db.getCommodities();
-        return commodities.find((c) => c.id === input) || null;
+        return await db.getCommodityById(input);
+      }),
+
+    // Full commodity detail with all vendor prices — used by /commodities/:id
+    getByIdWithPrices: publicProcedure
+      .input(z.string().min(1))
+      .query(async ({ input }) => {
+        return await db.getCommodityWithVendorPrices(input);
       }),
   }),
 

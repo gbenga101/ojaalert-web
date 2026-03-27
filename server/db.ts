@@ -1,12 +1,12 @@
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { drizzle as createDrizzle } from "drizzle-orm/node-postgres";
 import { profiles } from "../drizzle/schema";
+import { ENV } from './_core/env';
 import { Pool } from "pg";
 
 let _db: ReturnType<typeof createDrizzle> | null = null;
 let _pool: Pool | null = null;
 
-// Lazily create the drizzle instance so local tooling can run without a DB.
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
@@ -32,7 +32,6 @@ export async function getProfileById(id: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// Look up a profile by their Supabase auth user ID
 export async function getUserByOpenId(openId: string) {
   const db = await getDb();
   if (!db) {
@@ -43,8 +42,6 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// Safety net: insert the profile if the Supabase trigger hasn't run yet.
-// ON CONFLICT DO NOTHING means this is always safe to call.
 export async function upsertUser(user: {
   openId: string;
   name?: string | null;
@@ -57,16 +54,11 @@ export async function upsertUser(user: {
     console.warn("[Database] Cannot upsert user: database not available");
     return;
   }
-
   try {
-    await db
-      .insert(profiles)
-      .values({
-        id: user.openId,
-        name: user.name ?? null,
-        role: "user",
-      })
-      .onConflictDoNothing();
+    const existing = await db.select().from(profiles).where(eq(profiles.id, user.openId)).limit(1);
+    if (existing.length === 0) {
+      console.log("[Database] Profile for user", user.openId, "not found. It should be created by auth trigger.");
+    }
   } catch (error) {
     console.error("[Database] Failed to upsert user:", error);
     throw error;
@@ -97,6 +89,98 @@ export async function getCommodities() {
   return db.select().from(commodities);
 }
 
+export async function getCommodityById(id: string) {
+  const db = await getDb();
+  if (!db) return null;
+  const { commodities } = await import("../drizzle/schema");
+  const result = await db.select().from(commodities).where(eq(commodities.id, id)).limit(1);
+  return result.length > 0 ? result[0] : null;
+}
+
+/**
+ * Returns a commodity with all vendor prices, joining:
+ *   vendor_products → vendor_stores → vendors (owner_name)
+ *   vendor_products → vendor_stores → markets (name, city, state)
+ *   vendor_products → units (name)
+ */
+export async function getCommodityWithVendorPrices(commodityId: string) {
+  const db = await getDb();
+  if (!db) return null;
+
+  // Use raw SQL for the multi-table join since Drizzle ORM join syntax
+  // depends on the exact schema definitions available at runtime.
+  const result = await db.execute(sql`
+    SELECT
+      c.id              AS commodity_id,
+      c.name            AS commodity_name,
+      c.category        AS commodity_category,
+      vp.id             AS vendor_product_id,
+      vp.current_price  AS price,
+      u.name            AS unit_name,
+      u.id              AS unit_id,
+      vs.id             AS vendor_store_id,
+      vs.store_name     AS store_name,
+      v.id              AS vendor_id,
+      v.owner_name      AS vendor_name,
+      v.phone_number    AS vendor_phone,
+      v.verification_status AS vendor_verification_status,
+      m.id              AS market_id,
+      m.name            AS market_name,
+      m.city            AS market_city,
+      m.state           AS market_state,
+      m.market_type     AS market_type,
+      vp.last_updated   AS last_updated
+    FROM commodities c
+    LEFT JOIN vendor_products vp  ON vp.commodity_id  = c.id
+    LEFT JOIN units u             ON u.id             = vp.unit_id
+    LEFT JOIN vendor_stores vs    ON vs.id            = vp.vendor_store_id
+    LEFT JOIN vendors v           ON v.id             = vs.vendor_id
+    LEFT JOIN markets m           ON m.id             = vs.market_id
+    WHERE c.id = ${commodityId}
+    ORDER BY vp.current_price ASC NULLS LAST
+  `);
+
+  if (!result.rows || result.rows.length === 0) return null;
+
+  // The first row always has commodity info — extract it
+  const firstRow = result.rows[0] as Record<string, unknown>;
+
+  const commodity = {
+    id: firstRow.commodity_id as string,
+    name: firstRow.commodity_name as string,
+    category: firstRow.commodity_category as string | null,
+  };
+
+  // Build vendor price rows — filter out null rows (LEFT JOIN with no prices)
+  const vendorPrices = result.rows
+    .filter((row) => {
+      const r = row as Record<string, unknown>;
+      return r.vendor_product_id != null;
+    })
+    .map((row) => {
+      const r = row as Record<string, unknown>;
+      return {
+        vendorProductId: r.vendor_product_id as string,
+        price: r.price != null ? Number(r.price) : null,
+        unitName: r.unit_name as string | null,
+        unitId: r.unit_id as string | null,
+        storeName: r.store_name as string | null,
+        vendorId: r.vendor_id as string | null,
+        vendorName: r.vendor_name as string | null,
+        vendorPhone: r.vendor_phone as string | null,
+        vendorVerificationStatus: r.vendor_verification_status as string | null,
+        marketId: r.market_id as string | null,
+        marketName: r.market_name as string | null,
+        marketCity: r.market_city as string | null,
+        marketState: r.market_state as string | null,
+        marketType: r.market_type as string | null,
+        lastUpdated: r.last_updated ? new Date(r.last_updated as string) : null,
+      };
+    });
+
+  return { commodity, vendorPrices };
+}
+
 // ─── Vendor queries ───────────────────────────────────────────────────────────
 
 export async function getVendorByProfileId(profileId: string) {
@@ -107,7 +191,11 @@ export async function getVendorByProfileId(profileId: string) {
   return result.length > 0 ? result[0] : null;
 }
 
-export async function createVendor(data: { profileId: string; ownerName: string; phoneNumber: string }) {
+export async function createVendor(data: {
+  profileId: string;
+  ownerName: string;
+  phoneNumber: string;
+}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { vendors } = await import("../drizzle/schema");
@@ -164,7 +252,10 @@ export async function createVendorProduct(data: {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { vendorProducts } = await import("../drizzle/schema");
-  const result = await db.insert(vendorProducts).values(data).returning();
+  const result = await db.insert(vendorProducts).values({
+    ...data,
+    currentPrice: data.currentPrice,
+  }).returning();
   return result[0];
 }
 
@@ -191,7 +282,10 @@ export async function getPriceHistory(vendorProductId: string) {
 
 // ─── Price Reports queries ────────────────────────────────────────────────────
 
-export async function createPriceReport(data: { vendorProductId: string; reportMessage: string }) {
+export async function createPriceReport(data: {
+  vendorProductId: string;
+  reportMessage: string;
+}) {
   const db = await getDb();
   if (!db) throw new Error("Database not available");
   const { priceReports } = await import("../drizzle/schema");
