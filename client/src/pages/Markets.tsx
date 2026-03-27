@@ -1,55 +1,19 @@
-import { useAuth } from "@/_core/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { MapPin, Calendar, AlertCircle } from "lucide-react";
+import { MapPin, AlertCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
-import { useLocation } from "wouter";
+import RotationalMarketCalculator from "@/components/RotationalMarketCalculator";
 
 export default function Markets() {
-  const { isAuthenticated } = useAuth();
   const [cityFilter, setCityFilter] = useState("");
   const [stateFilter, setStateFilter] = useState("");
-  const [, navigate] = useLocation();
-  
-  // Fetch all markets
+
   const { data: markets = [], isLoading } = trpc.markets.list.useQuery({
     city: cityFilter || undefined,
     state: stateFilter || undefined,
   });
-  
-  // Calculate next market day for rotational markets
-  const calculateNextMarketDay = (market: typeof markets[0]) => {
-  if (
-    market.marketType !== "rotational" ||
-    !market.referenceDate ||
-    !market.cycleLength
-  ) {
-    return null;
-  }
-
-  // referenceDate is a YYYY-MM-DD string
-  const refDate = new Date(`${market.referenceDate}T00:00:00Z`);
-  if (isNaN(refDate.getTime())) return null;
-  const today = new Date();
-  today.setHours(0,0,0,0);
-
-  const daysDiff = Math.floor(
-    (today.getTime() - refDate.getTime()) / (1000 * 60 * 60 * 24)
-  );
-
-  const remainder = daysDiff % market.cycleLength;
-
-  const daysUntilNext = remainder === 0
-    ? 0
-    : market.cycleLength - remainder;
-  
-  const nextDate = new Date(today);
-  nextDate.setDate(today.getDate() + daysUntilNext);
-
-  return nextDate;
-};
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -94,68 +58,64 @@ export default function Markets() {
             </div>
           ) : (
             <div className="space-y-4">
-              {markets.map((market) => {
-                const nextMarketDay = calculateNextMarketDay(market);
-                return (
-                  <Card key={market.id} className="hover:shadow-md transition-shadow">
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="flex items-center gap-2">
-                            <MapPin className="w-5 h-5 text-blue-600" />
-                            {market.name}
-                          </CardTitle>
-                          <CardDescription>
-                            {market.city}, {market.state}
-                          </CardDescription>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          {market.isActiveToday && (
-                            <span className="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">
-                              Active Today
-                            </span>
-                          )}
-                          <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                            market.marketType === "rotational" 
-                              ? "bg-orange-100 text-orange-800" 
-                              : "bg-green-100 text-green-800"
-                          }`}>
-                            {market.marketType === "rotational" ? "Rotational" : "Daily"}
-                          </span>
-                        </div>
+              {markets.map((market) => (
+                <Card key={market.id} className="hover:shadow-md transition-shadow">
+                  <CardHeader>
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <CardTitle className="flex items-center gap-2">
+                          <MapPin className="w-5 h-5 text-blue-600" />
+                          {market.name}
+                        </CardTitle>
+                        <CardDescription>
+                          {market.city}, {market.state}
+                        </CardDescription>
                       </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {market.latitude && market.longitude && (
-                          <div className="text-sm">
-                            <span className="font-medium text-slate-700">Location:</span>
-                            <p className="text-slate-600">{market.latitude}, {market.longitude}</p>
-                          </div>
-                        )}
-                        {market.marketType === "rotational" && market.cycleLength && (
-                          <div className="text-sm">
-                            <span className="font-medium text-slate-700">Cycle:</span>
-                            <p className="text-slate-600">{market.cycleLength}-day rotation</p>
-                          </div>
-                        )}
-                        {nextMarketDay && (
-                          <div className="text-sm">
-                            <span className="font-medium text-slate-700 flex items-center gap-1">
-                              <Calendar className="w-4 h-4" />
-                              Next Market Day:
-                            </span>
-                            <p className="text-slate-600">{nextMarketDay.toLocaleDateString()}</p>
-                          </div>
-                        )}
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-medium ${
+                          market.marketType === "rotational"
+                            ? "bg-orange-100 text-orange-800"
+                            : "bg-green-100 text-green-800"
+                        }`}
+                      >
+                        {market.marketType === "rotational" ? "Rotational" : "Daily"}
+                      </span>
+                    </div>
+                  </CardHeader>
+
+                  <CardContent className="space-y-4">
+                    {/* Location */}
+                    {market.latitude && market.longitude && (
+                      <div className="text-sm text-slate-600">
+                        <span className="font-medium text-slate-700">Location: </span>
+                        {market.latitude}, {market.longitude}
                       </div>
-                      <Button variant="outline" className="w-full">
-                        View Commodities & Prices
-                      </Button>
-                    </CardContent>
-                  </Card>
-                );
-              })}
+                    )}
+
+                    {/* Rotational market calculator */}
+                    {market.marketType === "rotational" &&
+                      market.cycleLength &&
+                      market.cyclePosition &&
+                      market.referenceDate ? (
+                        <RotationalMarketCalculator
+                          cycleLength={market.cycleLength}
+                          cyclePosition={market.cyclePosition}
+                          referenceDate={market.referenceDate}
+                        />
+                      ) : market.marketType === "daily" ? (
+                        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+                          <p className="text-sm font-medium text-green-800">
+                            ✓ Open every day
+                          </p>
+                        </div>
+                      ) : null}
+
+                    <Button variant="outline" className="w-full">
+                      View Commodities & Prices
+                    </Button>
+                  </CardContent>
+                </Card>
+              ))}
             </div>
           )}
         </div>
