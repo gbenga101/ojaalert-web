@@ -3,10 +3,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
+import PriceHistoryChart, { type PriceHistoryEntry } from "@/components/PriceHistoryChart";
 import {
   ArrowLeft,
   CheckCircle2,
   Clock,
+  LineChart,
   MapPin,
   Package,
   Phone,
@@ -71,8 +73,8 @@ function NoPricesState({ commodityName }: { commodityName: string }) {
       </div>
       <h3 className="text-lg font-semibold text-stone-700 mb-2">No prices listed yet</h3>
       <p className="text-stone-500 text-sm max-w-xs">
-        No vendors are currently listing prices for <span className="font-medium text-stone-700">{commodityName}</span>.
-        Check back soon or explore other commodities.
+        No vendors are currently listing prices for{" "}
+        <span className="font-medium text-stone-700">{commodityName}</span>. Check back soon.
       </p>
     </div>
   );
@@ -113,14 +115,11 @@ function PriceCard({
   return (
     <Card
       className={`transition-shadow hover:shadow-md ${
-        isLowest
-          ? "border-emerald-300 bg-emerald-50/40"
-          : "border-stone-200 bg-white"
+        isLowest ? "border-emerald-300 bg-emerald-50/40" : "border-stone-200 bg-white"
       }`}
     >
       <CardHeader className="pb-2 pt-4 px-5">
         <div className="flex items-start justify-between gap-3">
-          {/* Left: rank + store info */}
           <div className="flex items-start gap-3 min-w-0">
             <div
               className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0 ${
@@ -154,19 +153,12 @@ function PriceCard({
             </div>
           </div>
 
-          {/* Right: price */}
           <div className="text-right flex-shrink-0">
-            <div
-              className={`text-xl font-bold tabular-nums ${
-                isLowest ? "text-emerald-700" : "text-stone-900"
-              }`}
-            >
+            <div className={`text-xl font-bold tabular-nums ${isLowest ? "text-emerald-700" : "text-stone-900"}`}>
               {formatPrice(entry.price)}
             </div>
             {entry.unitName && (
-              <div className="text-xs text-stone-500 mt-0.5">
-                per {entry.unitName}
-              </div>
+              <div className="text-xs text-stone-500 mt-0.5">per {entry.unitName}</div>
             )}
             {isLowest && (
               <div className="flex items-center justify-end gap-1 text-xs text-emerald-600 font-medium mt-1">
@@ -188,10 +180,7 @@ function PriceCard({
             </span>
           )}
           {entry.marketType && (
-            <Badge
-              variant="secondary"
-              className="text-xs h-4 px-1.5 font-normal"
-            >
+            <Badge variant="secondary" className="text-xs h-4 px-1.5 font-normal">
               {entry.marketType === "rotational" ? "Rotational" : "Daily"}
             </Badge>
           )}
@@ -221,11 +210,7 @@ function PriceCard({
 
 // ─── Stats bar ────────────────────────────────────────────────────────────────
 
-function PriceStats({
-  vendorPrices,
-}: {
-  vendorPrices: VendorPrice[];
-}) {
+function PriceStats({ vendorPrices }: { vendorPrices: VendorPrice[] }) {
   const validPrices = vendorPrices
     .map((v) => v.price)
     .filter((p): p is number => p != null);
@@ -239,9 +224,9 @@ function PriceStats({
   return (
     <div className="grid grid-cols-3 gap-3 mb-6">
       {[
-        { label: "Lowest", value: formatPrice(lowest), color: "text-emerald-700", bg: "bg-emerald-50", icon: TrendingDown },
-        { label: "Average", value: formatPrice(Math.round(avg)), color: "text-stone-700", bg: "bg-stone-50", icon: ShoppingCart },
-        { label: "Highest", value: formatPrice(highest), color: "text-rose-700", bg: "bg-rose-50", icon: TrendingUp },
+        { label: "Lowest",  value: formatPrice(lowest),           color: "text-emerald-700", bg: "bg-emerald-50",  icon: TrendingDown },
+        { label: "Average", value: formatPrice(Math.round(avg)),  color: "text-stone-700",   bg: "bg-stone-50",    icon: ShoppingCart },
+        { label: "Highest", value: formatPrice(highest),          color: "text-rose-700",    bg: "bg-rose-50",     icon: TrendingUp },
       ].map(({ label, value, color, bg, icon: Icon }) => (
         <div key={label} className={`${bg} rounded-xl p-3 text-center`}>
           <Icon className={`w-4 h-4 ${color} mx-auto mb-1`} />
@@ -261,6 +246,11 @@ export default function CommodityDetail() {
   const commodityId = params.id;
 
   const { data, isLoading, error } = trpc.commodities.getByIdWithPrices.useQuery(
+    commodityId,
+    { enabled: !!commodityId }
+  );
+
+  const { data: historyData = [] } = trpc.priceHistory.getByCommodity.useQuery(
     commodityId,
     { enabled: !!commodityId }
   );
@@ -292,23 +282,27 @@ export default function CommodityDetail() {
     .filter((p): p is number => p != null);
   const lowestPrice = validPrices.length > 0 ? Math.min(...validPrices) : null;
 
-  // Group by market for section headers
-  const byMarket = vendorPrices.reduce<Record<string, VendorPrice[]>>(
-    (acc, entry) => {
-      const key = entry.marketName ?? "Other";
-      if (!acc[key]) acc[key] = [];
-      acc[key].push(entry);
-      return acc;
-    },
-    {}
-  );
+  const byMarket = vendorPrices.reduce<Record<string, VendorPrice[]>>((acc, entry) => {
+    const key = entry.marketName ?? "Other";
+    if (!acc[key]) acc[key] = [];
+    acc[key].push(entry);
+    return acc;
+  }, {});
 
-  // Flat sorted list (already sorted by price ASC from SQL)
   const sortedPrices = [...vendorPrices].sort((a, b) => {
     if (a.price == null) return 1;
     if (b.price == null) return -1;
     return a.price - b.price;
   });
+
+  // Get unit name from first vendor price that has one
+  const unitName = vendorPrices.find((v) => v.unitName)?.unitName ?? null;
+
+  // Cast history data — recordedAt may come back as string from tRPC serialization
+  const chartHistory: PriceHistoryEntry[] = historyData.map((h) => ({
+    ...h,
+    recordedAt: h.recordedAt ? new Date(h.recordedAt) : null,
+  }));
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -363,7 +357,18 @@ export default function CommodityDetail() {
             {/* Stats */}
             <PriceStats vendorPrices={vendorPrices} />
 
-            {/* Section label */}
+            {/* ── Price History Chart ── */}
+            <div className="bg-white rounded-xl border border-stone-200 p-5 mb-6">
+              <div className="flex items-center gap-2 mb-4">
+                <LineChart className="w-4 h-4 text-stone-400" />
+                <h2 className="text-sm font-semibold text-stone-600 uppercase tracking-wide">
+                  Price History — Last 30 Days
+                </h2>
+              </div>
+              <PriceHistoryChart data={chartHistory} unitName={unitName} />
+            </div>
+
+            {/* Vendor price list label */}
             <div className="flex items-center gap-2 mb-4">
               <CheckCircle2 className="w-4 h-4 text-stone-400" />
               <h2 className="text-sm font-semibold text-stone-600 uppercase tracking-wide">
@@ -383,7 +388,7 @@ export default function CommodityDetail() {
               ))}
             </div>
 
-            {/* Market breakdown section */}
+            {/* By Market breakdown */}
             {Object.keys(byMarket).length > 1 && (
               <div className="mt-10">
                 <h2 className="text-sm font-semibold text-stone-600 uppercase tracking-wide mb-4 flex items-center gap-2">
@@ -400,9 +405,7 @@ export default function CommodityDetail() {
                     <div key={marketName} className="mb-6">
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-stone-800">
-                            {marketName}
-                          </span>
+                          <span className="font-semibold text-stone-800">{marketName}</span>
                           {entries[0]?.marketCity && (
                             <span className="text-xs text-stone-500">
                               {entries[0].marketCity}, {entries[0].marketState}
@@ -411,8 +414,7 @@ export default function CommodityDetail() {
                         </div>
                         <span className="text-xs text-stone-500">
                           {entries.length} seller{entries.length !== 1 ? "s" : ""}
-                          {" · "}
-                          from {formatPrice(marketLowest)}
+                          {" · "}from {formatPrice(marketLowest)}
                         </span>
                       </div>
                       <div className="space-y-2 pl-2 border-l-2 border-stone-200">

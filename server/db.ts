@@ -102,13 +102,13 @@ export async function getCommodityById(id: string) {
  *   vendor_products → vendor_stores → vendors (owner_name)
  *   vendor_products → vendor_stores → markets (name, city, state)
  *   vendor_products → units (name)
+ *
+ * NOTE: commodities table has no description column — intentionally omitted.
  */
 export async function getCommodityWithVendorPrices(commodityId: string) {
   const db = await getDb();
   if (!db) return null;
 
-  // Use raw SQL for the multi-table join since Drizzle ORM join syntax
-  // depends on the exact schema definitions available at runtime.
   const result = await db.execute(sql`
     SELECT
       c.id              AS commodity_id,
@@ -142,7 +142,6 @@ export async function getCommodityWithVendorPrices(commodityId: string) {
 
   if (!result.rows || result.rows.length === 0) return null;
 
-  // The first row always has commodity info — extract it
   const firstRow = result.rows[0] as Record<string, unknown>;
 
   const commodity = {
@@ -151,12 +150,8 @@ export async function getCommodityWithVendorPrices(commodityId: string) {
     category: firstRow.commodity_category as string | null,
   };
 
-  // Build vendor price rows — filter out null rows (LEFT JOIN with no prices)
   const vendorPrices = result.rows
-    .filter((row) => {
-      const r = row as Record<string, unknown>;
-      return r.vendor_product_id != null;
-    })
+    .filter((row) => (row as Record<string, unknown>).vendor_product_id != null)
     .map((row) => {
       const r = row as Record<string, unknown>;
       return {
@@ -179,6 +174,53 @@ export async function getCommodityWithVendorPrices(commodityId: string) {
     });
 
   return { commodity, vendorPrices };
+}
+
+/**
+ * Returns price history for all vendor products of a given commodity.
+ * Joins price_history → vendor_products → vendor_stores → vendors → markets
+ * Returns one row per (vendor_product, date) — used for the multi-line chart.
+ */
+export async function getPriceHistoryForCommodity(commodityId: string) {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db.execute(sql`
+    SELECT
+      ph.id             AS history_id,
+      ph.price          AS price,
+      ph.recorded_at    AS recorded_at,
+      ph.source         AS source,
+      vp.id             AS vendor_product_id,
+      v.id              AS vendor_id,
+      v.owner_name      AS vendor_name,
+      vs.store_name     AS store_name,
+      m.name            AS market_name,
+      m.city            AS market_city
+    FROM price_history ph
+    JOIN vendor_products vp ON vp.id  = ph.vendor_product_id
+    JOIN vendor_stores vs   ON vs.id  = vp.vendor_store_id
+    JOIN vendors v          ON v.id   = vs.vendor_id
+    JOIN markets m          ON m.id   = vs.market_id
+    WHERE vp.commodity_id = ${commodityId}
+    ORDER BY ph.recorded_at ASC
+  `);
+
+  return result.rows.map((row) => {
+    const r = row as Record<string, unknown>;
+    return {
+      historyId:       r.history_id as string,
+      price:           r.price != null ? Number(r.price) : null,
+      recordedAt:      r.recorded_at ? new Date(r.recorded_at as string) : null,
+      source:          r.source as string | null,
+      vendorProductId: r.vendor_product_id as string,
+      vendorId:        r.vendor_id as string,
+      vendorName:      r.vendor_name as string,
+      storeName:       r.store_name as string,
+      marketName:      r.market_name as string,
+      marketCity:      r.market_city as string | null,
+    };
+  });
 }
 
 // ─── Vendor queries ───────────────────────────────────────────────────────────

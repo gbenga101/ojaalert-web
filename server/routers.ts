@@ -80,7 +80,7 @@ export const appRouter = router({
         return await db.getCommodityById(input);
       }),
 
-    // Full commodity detail with all vendor prices — used by /commodities/:id
+    // Full commodity detail with all vendor prices
     getByIdWithPrices: publicProcedure
       .input(z.string().min(1))
       .query(async ({ input }) => {
@@ -180,9 +180,15 @@ export const appRouter = router({
   }),
 
   priceHistory: router({
+    // Original — by single vendor product
     getByProduct: publicProcedure
       .input(z.string().min(1))
       .query(async ({ input }) => await db.getPriceHistory(input)),
+
+    // New — all vendor price history for a commodity, used by the chart
+    getByCommodity: publicProcedure
+      .input(z.string().min(1))
+      .query(async ({ input }) => await db.getPriceHistoryForCommodity(input)),
   }),
 
   priceReports: router({

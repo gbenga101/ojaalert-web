@@ -62,7 +62,7 @@ export default function Navbar() {
             {isAuthenticated ? (
               <div className="hidden md:flex items-center gap-3">
                 <span className="text-sm text-slate-600 truncate max-w-[140px]">
-                  {user?.name || user?.email || "Account"}
+                  {user?.user_metadata?.name || user?.email || "Account"}
                 </span>
                 <Button
                   variant="outline"
