@@ -8,8 +8,10 @@ import {
   ArrowLeft,
   CheckCircle2,
   Clock,
+  ExternalLink,
   LineChart,
   MapPin,
+  Minus,
   Package,
   Phone,
   ShieldCheck,
@@ -19,6 +21,7 @@ import {
   TrendingUp,
 } from "lucide-react";
 import { useParams, useLocation } from "wouter";
+import { subDays } from "date-fns";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -104,10 +107,12 @@ function PriceCard({
   entry,
   rank,
   lowestPrice,
+  onViewHistory,
 }: {
   entry: VendorPrice;
   rank: number;
   lowestPrice: number | null;
+  onViewHistory: () => void;
 }) {
   const isLowest = entry.price != null && entry.price === lowestPrice;
   const isVerified = entry.vendorVerificationStatus === "approved";
@@ -192,8 +197,8 @@ function PriceCard({
           )}
         </div>
 
-        {entry.vendorPhone && (
-          <div className="mt-2 pt-2 border-t border-stone-100">
+        <div className="flex items-center justify-between mt-2 pt-2 border-t border-stone-100">
+          {entry.vendorPhone ? (
             <a
               href={`tel:${entry.vendorPhone}`}
               className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 font-medium"
@@ -201,16 +206,31 @@ function PriceCard({
               <Phone className="w-3 h-3" />
               {entry.vendorPhone}
             </a>
-          </div>
-        )}
+          ) : (
+            <span />
+          )}
+          <button
+            onClick={onViewHistory}
+            className="flex items-center gap-1 text-xs text-stone-500 hover:text-blue-600 transition-colors"
+          >
+            <ExternalLink className="w-3 h-3" />
+            Price history
+          </button>
+        </div>
       </CardContent>
     </Card>
   );
 }
 
-// ─── Stats bar ────────────────────────────────────────────────────────────────
+// ─── Stats bar with trend analysis ───────────────────────────────────────────
 
-function PriceStats({ vendorPrices }: { vendorPrices: VendorPrice[] }) {
+function PriceStats({
+  vendorPrices,
+  chartHistory,
+}: {
+  vendorPrices: VendorPrice[];
+  chartHistory: PriceHistoryEntry[];
+}) {
   const validPrices = vendorPrices
     .map((v) => v.price)
     .filter((p): p is number => p != null);
@@ -221,17 +241,53 @@ function PriceStats({ vendorPrices }: { vendorPrices: VendorPrice[] }) {
   const highest = Math.max(...validPrices);
   const avg = validPrices.reduce((a, b) => a + b, 0) / validPrices.length;
 
+  // Trend: compare current avg vs avg 7 days ago across all vendor history
+  const sevenDaysAgoCutoff = subDays(new Date(), 7);
+  const recentPrices = chartHistory
+    .filter((h) => h.recordedAt != null && new Date(h.recordedAt) > sevenDaysAgoCutoff && h.price != null)
+    .map((h) => h.price!);
+  const olderPrices = chartHistory
+    .filter((h) => h.recordedAt != null && new Date(h.recordedAt) <= sevenDaysAgoCutoff && h.price != null)
+    .map((h) => h.price!);
+
+  let trendPct: number | null = null;
+  if (recentPrices.length > 0 && olderPrices.length > 0) {
+    const recentAvg = recentPrices.reduce((a, b) => a + b, 0) / recentPrices.length;
+    const olderAvg = olderPrices.reduce((a, b) => a + b, 0) / olderPrices.length;
+    trendPct = ((recentAvg - olderAvg) / olderAvg) * 100;
+  }
+
   return (
     <div className="grid grid-cols-3 gap-3 mb-6">
       {[
-        { label: "Lowest",  value: formatPrice(lowest),           color: "text-emerald-700", bg: "bg-emerald-50",  icon: TrendingDown },
-        { label: "Average", value: formatPrice(Math.round(avg)),  color: "text-stone-700",   bg: "bg-stone-50",    icon: ShoppingCart },
-        { label: "Highest", value: formatPrice(highest),          color: "text-rose-700",    bg: "bg-rose-50",     icon: TrendingUp },
+        { label: "Lowest",  value: formatPrice(lowest),          color: "text-emerald-700", bg: "bg-emerald-50",  icon: TrendingDown },
+        { label: "Average", value: formatPrice(Math.round(avg)), color: "text-stone-700",   bg: "bg-stone-50",    icon: ShoppingCart },
+        { label: "Highest", value: formatPrice(highest),         color: "text-rose-700",    bg: "bg-rose-50",     icon: TrendingUp },
       ].map(({ label, value, color, bg, icon: Icon }) => (
         <div key={label} className={`${bg} rounded-xl p-3 text-center`}>
           <Icon className={`w-4 h-4 ${color} mx-auto mb-1`} />
           <div className={`text-base font-bold tabular-nums ${color}`}>{value}</div>
           <div className="text-xs text-stone-500 mt-0.5">{label}</div>
+          {/* Show trend only on Average card */}
+          {label === "Average" && trendPct != null && (
+            <div
+              className={`flex items-center justify-center gap-0.5 text-xs font-medium mt-1 ${
+                Math.abs(trendPct) < 0.5
+                  ? "text-stone-400"
+                  : trendPct > 0
+                  ? "text-rose-600"
+                  : "text-emerald-600"
+              }`}
+            >
+              {Math.abs(trendPct) < 0.5 ? (
+                <><Minus className="w-3 h-3" /> stable</>
+              ) : trendPct > 0 ? (
+                <><TrendingUp className="w-3 h-3" />+{trendPct.toFixed(1)}% vs 7d</>
+              ) : (
+                <><TrendingDown className="w-3 h-3" />{trendPct.toFixed(1)}% vs 7d</>
+              )}
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -295,14 +351,14 @@ export default function CommodityDetail() {
     return a.price - b.price;
   });
 
-  // Get unit name from first vendor price that has one
   const unitName = vendorPrices.find((v) => v.unitName)?.unitName ?? null;
 
-  // Cast history data — recordedAt may come back as string from tRPC serialization
   const chartHistory: PriceHistoryEntry[] = historyData.map((h) => ({
     ...h,
     recordedAt: h.recordedAt ? new Date(h.recordedAt) : null,
   }));
+
+  const goToHistory = () => navigate(`/commodities/${commodityId}/history`);
 
   return (
     <div className="min-h-screen bg-stone-50">
@@ -354,18 +410,22 @@ export default function CommodityDetail() {
           <NoPricesState commodityName={commodity.name} />
         ) : (
           <>
-            {/* Stats */}
-            <PriceStats vendorPrices={vendorPrices} />
+            {/* Stats with trend analysis */}
+            <PriceStats vendorPrices={vendorPrices} chartHistory={chartHistory} />
 
             {/* ── Price History Chart ── */}
             <div className="bg-white rounded-xl border border-stone-200 p-5 mb-6">
-              <div className="flex items-center gap-2 mb-4">
+              <div className="flex items-center gap-2 mb-1">
                 <LineChart className="w-4 h-4 text-stone-400" />
                 <h2 className="text-sm font-semibold text-stone-600 uppercase tracking-wide">
-                  Price History — Last 30 Days
+                  Price History
                 </h2>
               </div>
-              <PriceHistoryChart data={chartHistory} unitName={unitName} />
+              <PriceHistoryChart
+                data={chartHistory}
+                unitName={unitName}
+                onViewFullHistory={goToHistory}
+              />
             </div>
 
             {/* Vendor price list label */}
@@ -384,6 +444,7 @@ export default function CommodityDetail() {
                   entry={entry}
                   rank={idx + 1}
                   lowestPrice={lowestPrice}
+                  onViewHistory={goToHistory}
                 />
               ))}
             </div>
@@ -426,6 +487,7 @@ export default function CommodityDetail() {
                               entry={entry}
                               rank={idx + 1}
                               lowestPrice={lowestPrice}
+                              onViewHistory={goToHistory}
                             />
                           ))}
                       </div>

@@ -9,6 +9,7 @@ import Home from "./pages/Home";
 import Markets from "./pages/Markets";
 import Commodities from "./pages/Commodities";
 import CommodityDetail from "./pages/CommodityDetail";
+import PriceHistoryDetail from "./pages/PriceHistoryDetail";
 import VendorDashboard from "./pages/VendorDashboard";
 
 function Router() {
@@ -17,6 +18,7 @@ function Router() {
       <Route path="/" component={Home} />
       <Route path="/markets" component={Markets} />
       <Route path="/commodities" component={Commodities} />
+      <Route path="/commodities/:id/history" component={PriceHistoryDetail} />
       <Route path="/commodities/:id" component={CommodityDetail} />
       <Route path="/vendor" component={VendorDashboard} />
       <Route path="/404" component={NotFound} />
@@ -31,7 +33,6 @@ function App() {
       <ThemeProvider defaultTheme="light">
         <TooltipProvider>
           <Toaster />
-          {/* Navbar renders once — appears on every page */}
           <Navbar />
           <Router />
         </TooltipProvider>

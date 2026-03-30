@@ -5,11 +5,11 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from "recharts";
-import { format } from "date-fns";
+import { format, subDays } from "date-fns";
 import { useState } from "react";
+import { ExternalLink } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -26,18 +26,23 @@ export type PriceHistoryEntry = {
   marketCity: string | null;
 };
 
-// Distinct colors for up to 10 vendor lines
-const VENDOR_COLORS = [
-  "#2563eb", // blue
-  "#16a34a", // green
-  "#dc2626", // red
-  "#d97706", // amber
-  "#7c3aed", // violet
-  "#0891b2", // cyan
-  "#db2777", // pink
-  "#65a30d", // lime
-  "#ea580c", // orange
-  "#475569", // slate
+export const VENDOR_COLORS = [
+  "#2563eb",
+  "#16a34a",
+  "#dc2626",
+  "#d97706",
+  "#7c3aed",
+  "#0891b2",
+  "#db2777",
+  "#65a30d",
+  "#ea580c",
+  "#475569",
+];
+
+const RANGE_OPTIONS = [
+  { label: "7D",  days: 7  },
+  { label: "14D", days: 14 },
+  { label: "30D", days: 30 },
 ];
 
 // ─── Custom tooltip ───────────────────────────────────────────────────────────
@@ -94,10 +99,11 @@ function CustomTooltip({
 type Props = {
   data: PriceHistoryEntry[];
   unitName?: string | null;
+  onViewFullHistory?: () => void;
 };
 
-export default function PriceHistoryChart({ data, unitName }: Props) {
-  // Track which vendor lines are hidden (toggled off via legend)
+export default function PriceHistoryChart({ data, unitName, onViewFullHistory }: Props) {
+  const [rangeDays, setRangeDays] = useState(30);
   const [hiddenVendors, setHiddenVendors] = useState<Set<string>>(new Set());
 
   if (data.length === 0) {
@@ -108,9 +114,15 @@ export default function PriceHistoryChart({ data, unitName }: Props) {
     );
   }
 
-  // ── Build unique vendors list (stable order) ──────────────────────────────
+  // ── Filter by selected date range ─────────────────────────────────────────
+  const cutoff = subDays(new Date(), rangeDays);
+  const filteredData = data.filter(
+    (e) => e.recordedAt != null && new Date(e.recordedAt) >= cutoff
+  );
+
+  // ── Unique vendors (stable order) ─────────────────────────────────────────
   const vendorMap = new Map<string, { vendorId: string; vendorName: string; marketName: string }>();
-  for (const entry of data) {
+  for (const entry of filteredData) {
     if (!vendorMap.has(entry.vendorId)) {
       vendorMap.set(entry.vendorId, {
         vendorId: entry.vendorId,
@@ -121,46 +133,63 @@ export default function PriceHistoryChart({ data, unitName }: Props) {
   }
   const vendors = Array.from(vendorMap.values());
 
-  // ── Build chart rows keyed by date string ─────────────────────────────────
-  // Each row: { date: "Mar 01", <vendorName>: price, <vendorName>__market: marketName }
+  // ── Build chart rows keyed by date ────────────────────────────────────────
   const rowMap = new Map<string, Record<string, unknown>>();
-
-  for (const entry of data) {
+  for (const entry of filteredData) {
     if (!entry.recordedAt || entry.price == null) continue;
-
     const dateKey = format(new Date(entry.recordedAt), "MMM dd");
-
-    if (!rowMap.has(dateKey)) {
-      rowMap.set(dateKey, { date: dateKey });
-    }
-
+    if (!rowMap.has(dateKey)) rowMap.set(dateKey, { date: dateKey });
     const row = rowMap.get(dateKey)!;
-    // If multiple entries on the same day for the same vendor, keep the last one
     row[entry.vendorName] = entry.price;
     row[`${entry.vendorName}__market`] = entry.marketName;
   }
-
   const chartData = Array.from(rowMap.values());
 
-  // ── Format Y axis ─────────────────────────────────────────────────────────
   const formatY = (value: number) => `₦${(value / 1000).toFixed(1)}k`;
 
-  // ── Toggle vendor line visibility ─────────────────────────────────────────
   const handleLegendClick = (vendorName: string) => {
     setHiddenVendors((prev) => {
       const next = new Set(prev);
-      if (next.has(vendorName)) {
-        next.delete(vendorName);
-      } else {
-        next.add(vendorName);
-      }
+      if (next.has(vendorName)) next.delete(vendorName);
+      else next.add(vendorName);
       return next;
     });
   };
 
   return (
     <div className="w-full">
-      {/* Legend — click to toggle */}
+      {/* ── Top bar: range toggle + view full history ── */}
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        {/* Range toggle */}
+        <div className="flex items-center gap-1 bg-stone-100 rounded-lg p-1">
+          {RANGE_OPTIONS.map(({ label, days }) => (
+            <button
+              key={label}
+              onClick={() => setRangeDays(days)}
+              className={`px-3 py-1 rounded-md text-xs font-semibold transition-all ${
+                rangeDays === days
+                  ? "bg-white text-stone-900 shadow-sm"
+                  : "text-stone-500 hover:text-stone-700"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* View full history link */}
+        {onViewFullHistory && (
+          <button
+            onClick={onViewFullHistory}
+            className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700 font-medium"
+          >
+            <ExternalLink className="w-3 h-3" />
+            Full history & analysis
+          </button>
+        )}
+      </div>
+
+      {/* ── Vendor legend (click to toggle) ── */}
       <div className="flex flex-wrap gap-2 mb-4">
         {vendors.map(({ vendorId, vendorName, marketName }, idx) => {
           const color = VENDOR_COLORS[idx % VENDOR_COLORS.length];
@@ -171,14 +200,10 @@ export default function PriceHistoryChart({ data, unitName }: Props) {
               onClick={() => handleLegendClick(vendorName)}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
                 isHidden
-                  ? "border-stone-200 text-stone-400 bg-stone-50 line-through"
+                  ? "border-stone-200 text-stone-400 bg-stone-50"
                   : "border-transparent text-white"
               }`}
-              style={
-                isHidden
-                  ? {}
-                  : { backgroundColor: color, borderColor: color }
-              }
+              style={isHidden ? {} : { backgroundColor: color }}
               title={`${vendorName} · ${marketName}`}
             >
               <span
@@ -191,55 +216,52 @@ export default function PriceHistoryChart({ data, unitName }: Props) {
         })}
       </div>
 
-      {/* Chart */}
-      <ResponsiveContainer width="100%" height={320}>
-        <LineChart
-          data={chartData}
-          margin={{ top: 5, right: 10, left: 0, bottom: 5 }}
-        >
-          <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-          <XAxis
-            dataKey="date"
-            tick={{ fontSize: 11, fill: "#94a3b8" }}
-            tickLine={false}
-            axisLine={{ stroke: "#e2e8f0" }}
-            interval="preserveStartEnd"
-          />
-          <YAxis
-            tickFormatter={formatY}
-            tick={{ fontSize: 11, fill: "#94a3b8" }}
-            tickLine={false}
-            axisLine={false}
-            width={52}
-          />
-          <Tooltip
-            content={<CustomTooltip />}
-            cursor={{ stroke: "#cbd5e1", strokeWidth: 1 }}
-          />
-          {vendors.map(({ vendorName }, idx) => (
-            <Line
-              key={vendorName}
-              type="monotone"
-              dataKey={vendorName}
-              stroke={VENDOR_COLORS[idx % VENDOR_COLORS.length]}
-              strokeWidth={hiddenVendors.has(vendorName) ? 0 : 2}
-              dot={false}
-              activeDot={
-                hiddenVendors.has(vendorName)
-                  ? false
-                  : { r: 4, strokeWidth: 0 }
-              }
-              connectNulls
-              hide={hiddenVendors.has(vendorName)}
+      {/* ── Chart ── */}
+      {chartData.length === 0 ? (
+        <div className="flex items-center justify-center h-40 text-stone-400 text-sm">
+          No data for this range.
+        </div>
+      ) : (
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 5 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+            <XAxis
+              dataKey="date"
+              tick={{ fontSize: 11, fill: "#94a3b8" }}
+              tickLine={false}
+              axisLine={{ stroke: "#e2e8f0" }}
+              interval="preserveStartEnd"
             />
-          ))}
-        </LineChart>
-      </ResponsiveContainer>
+            <YAxis
+              tickFormatter={formatY}
+              tick={{ fontSize: 11, fill: "#94a3b8" }}
+              tickLine={false}
+              axisLine={false}
+              width={52}
+            />
+            <Tooltip
+              content={<CustomTooltip />}
+              cursor={{ stroke: "#cbd5e1", strokeWidth: 1 }}
+            />
+            {vendors.map(({ vendorName }, idx) => (
+              <Line
+                key={vendorName}
+                type="monotone"
+                dataKey={vendorName}
+                stroke={VENDOR_COLORS[idx % VENDOR_COLORS.length]}
+                strokeWidth={hiddenVendors.has(vendorName) ? 0 : 2}
+                dot={false}
+                activeDot={hiddenVendors.has(vendorName) ? false : { r: 4, strokeWidth: 0 }}
+                connectNulls
+                hide={hiddenVendors.has(vendorName)}
+              />
+            ))}
+          </LineChart>
+        </ResponsiveContainer>
+      )}
 
       {unitName && (
-        <p className="text-xs text-stone-400 text-right mt-1">
-          Price per {unitName}
-        </p>
+        <p className="text-xs text-stone-400 text-right mt-1">Price per {unitName}</p>
       )}
     </div>
   );
