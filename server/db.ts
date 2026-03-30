@@ -178,8 +178,11 @@ export async function getCommodityWithVendorPrices(commodityId: string) {
 
 /**
  * Returns price history for all vendor products of a given commodity.
- * Joins price_history → vendor_products → vendor_stores → vendors → markets
- * Returns one row per (vendor_product, date) — used for the multi-line chart.
+ *
+ * Averages multiple entries per (vendor, day) into a single data point
+ * so the chart gets one clean value per vendor per day.
+ *
+ * Returns rows ordered by date ASC — ready for Recharts.
  */
 export async function getPriceHistoryForCommodity(commodityId: string) {
   const db = await getDb();
@@ -187,32 +190,39 @@ export async function getPriceHistoryForCommodity(commodityId: string) {
 
   const result = await db.execute(sql`
     SELECT
-      ph.id             AS history_id,
-      ph.price          AS price,
-      ph.recorded_at    AS recorded_at,
-      ph.source         AS source,
-      vp.id             AS vendor_product_id,
-      v.id              AS vendor_id,
-      v.owner_name      AS vendor_name,
-      vs.store_name     AS store_name,
-      m.name            AS market_name,
-      m.city            AS market_city
+      DATE(ph.recorded_at)        AS day,
+      ROUND(AVG(ph.price), 2)     AS avg_price,
+      vp.id                       AS vendor_product_id,
+      v.id                        AS vendor_id,
+      v.owner_name                AS vendor_name,
+      vs.store_name               AS store_name,
+      m.name                      AS market_name,
+      m.city                      AS market_city
     FROM price_history ph
     JOIN vendor_products vp ON vp.id  = ph.vendor_product_id
     JOIN vendor_stores vs   ON vs.id  = vp.vendor_store_id
     JOIN vendors v          ON v.id   = vs.vendor_id
     JOIN markets m          ON m.id   = vs.market_id
     WHERE vp.commodity_id = ${commodityId}
-    ORDER BY ph.recorded_at ASC
+    GROUP BY
+      DATE(ph.recorded_at),
+      vp.id,
+      v.id,
+      v.owner_name,
+      vs.store_name,
+      m.name,
+      m.city
+    ORDER BY day ASC
   `);
 
   return result.rows.map((row) => {
     const r = row as Record<string, unknown>;
     return {
-      historyId:       r.history_id as string,
-      price:           r.price != null ? Number(r.price) : null,
-      recordedAt:      r.recorded_at ? new Date(r.recorded_at as string) : null,
-      source:          r.source as string | null,
+      // historyId not meaningful after GROUP BY — use a composite key on frontend
+      historyId:       `${r.vendor_id}-${r.day}`,
+      price:           r.avg_price != null ? Number(r.avg_price) : null,
+      recordedAt:      r.day ? new Date(r.day as string) : null,
+      source:          null, // averaged — source no longer meaningful
       vendorProductId: r.vendor_product_id as string,
       vendorId:        r.vendor_id as string,
       vendorName:      r.vendor_name as string,
