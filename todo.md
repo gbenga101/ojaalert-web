@@ -28,12 +28,14 @@
 - [ ] Add date range filtering for historical data
 
 ## Phase 5: Vendor Management
-- [ ] Create vendor authentication and profile setup
-- [x] Build vendor dashboard
-- [x] Implement vendor store management
-- [ ] Create product listing management UI
-- [ ] Build price update form for vendors
-- [ ] Add vendor verification status display
+- [x] Vendor dashboard page exists (basic shell)
+- [x] Vendor store creation form (basic)
+- [ ] Vendor product listing management UI
+      — form to add a product (commodity + unit + price)
+      — list of vendor's current products with prices
+- [ ] Price update form — vendor can update current_price on a product
+- [ ] Vendor verification status display
+- [ ] Vendor profile creation flow (currently shows "No Vendor Profile" card)
 
 ## Phase 6: Price Reporting
 - [ ] Create price reports table schema

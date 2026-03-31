@@ -1,3 +1,4 @@
+// server/routers.ts
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
@@ -87,12 +88,6 @@ export const appRouter = router({
       }),
   }),
 
-  units: router({
-    list: publicProcedure.query(async () => {
-      return await db.getUnits();
-    }),
-  }),
-
   vendors: router({
     me: protectedProcedure.query(async ({ ctx }) => {
       return await db.getVendorByProfileId(ctx.user.id);
@@ -145,7 +140,7 @@ export const appRouter = router({
   }),
 
   vendorProducts: router({
-    listByStore: publicProcedure  // ← kept public for compatibility
+    listByStore: publicProcedure
       .input(z.string().min(1))
       .query(async ({ input }) => await db.getVendorProducts(input)),
 

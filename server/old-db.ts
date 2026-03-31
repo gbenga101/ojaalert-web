@@ -218,10 +218,11 @@ export async function getPriceHistoryForCommodity(commodityId: string) {
   return result.rows.map((row) => {
     const r = row as Record<string, unknown>;
     return {
+      // historyId not meaningful after GROUP BY — use a composite key on frontend
       historyId:       `${r.vendor_id}-${r.day}`,
       price:           r.avg_price != null ? Number(r.avg_price) : null,
       recordedAt:      r.day ? new Date(r.day as string) : null,
-      source:          null,
+      source:          null, // averaged — source no longer meaningful
       vendorProductId: r.vendor_product_id as string,
       vendorId:        r.vendor_id as string,
       vendorName:      r.vendor_name as string,
@@ -230,14 +231,6 @@ export async function getPriceHistoryForCommodity(commodityId: string) {
       marketCity:      r.market_city as string | null,
     };
   });
-}
-
-// ─── Units queries ────────────────────────────────────────────────────────────
-export async function getUnits() {
-  const db = await getDb();
-  if (!db) return [];
-  const { units } = await import("../drizzle/schema");
-  return db.select().from(units);
 }
 
 // ─── Vendor queries ───────────────────────────────────────────────────────────
