@@ -2,75 +2,110 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Skeleton } from "@/components/ui/skeleton";
-import { AlertCircle, ArrowRight, Package, Tag } from "lucide-react";
+import { AlertCircle, X, ArrowLeft } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
-import { useLocation } from "wouter";
-
-function CommoditySkeleton() {
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-      {[1, 2, 3, 4, 5, 6].map((i) => (
-        <div key={i} className="rounded-xl border border-stone-200 bg-white p-5 space-y-3">
-          <Skeleton className="h-5 w-40" />
-          <Skeleton className="h-4 w-24" />
-          <Skeleton className="h-8 w-full mt-2" />
-        </div>
-      ))}
-    </div>
-  );
-}
+import { useLocation, useSearch } from "wouter";
 
 export default function Commodities() {
   const [, navigate] = useLocation();
+  const searchString = useSearch();
+  const params = new URLSearchParams(searchString);
+  const marketId = params.get("marketId") || "";
+
   const [categoryFilter, setCategoryFilter] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
 
+  // Main commodities list (with optional category filter)
   const { data: commodities = [], isLoading } = trpc.commodities.list.useQuery({
     category: categoryFilter || undefined,
   });
 
+  // Fetch market details only when marketId is present
+  const { data: markets = [] } = trpc.markets.list.useQuery(
+    {},
+    { enabled: !!marketId }
+  );
+
+  const activeMarket = marketId
+    ? markets.find((m) => m.id === marketId)
+    : null;
+
+  // Client-side search filter
   const filteredCommodities = commodities.filter(
     (c) =>
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (c.category?.toLowerCase() ?? "").includes(searchQuery.toLowerCase())
   );
 
+  // Unique categories for dropdown
   const categories = Array.from(
     new Set(commodities.map((c) => c.category).filter(Boolean))
   );
 
   return (
-    <div className="min-h-screen bg-stone-50">
-      {/* ── Header ── */}
-      <header className="bg-white border-b border-stone-200 sticky top-0 z-40">
-        <div className="max-w-6xl mx-auto px-4 py-5">
-          <div className="flex items-center gap-3 mb-1">
-            <Package className="w-6 h-6 text-amber-600" />
-            <h1 className="text-2xl font-bold text-stone-900">Commodities</h1>
+    <div className="min-h-screen bg-slate-50">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 sticky top-0 z-50">
+        <div className="container max-w-6xl mx-auto px-4 py-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-900">Commodities & Prices</h1>
+              <p className="text-slate-600 mt-1">
+                Browse and compare commodity prices across markets
+              </p>
+            </div>
+            {activeMarket && (
+              <Button
+                variant="outline"
+                onClick={() => navigate("/markets")}
+                className="flex items-center gap-2"
+              >
+                <ArrowLeft className="w-4 h-4" />
+                Back to Markets
+              </Button>
+            )}
           </div>
-          <p className="text-stone-500 text-sm">
-            Browse commodities and compare prices across vendors and markets
-          </p>
         </div>
       </header>
 
-      {/* ── Filters ── */}
-      <section className="bg-white border-b border-stone-100 py-4">
-        <div className="max-w-6xl mx-auto px-4">
-          <div className="flex flex-col sm:flex-row gap-3">
+      {/* Active Market Banner */}
+      {activeMarket && (
+        <div className="bg-blue-50 border-b border-blue-200 py-3">
+          <div className="container max-w-6xl mx-auto px-4 flex items-center justify-between">
+            <p className="text-sm text-blue-800">
+              Showing commodities for{" "}
+              <span className="font-semibold">{activeMarket.name}</span>
+              {activeMarket.city ? ` — ${activeMarket.city}` : ""}
+            </p>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-blue-700 hover:text-blue-900 hover:bg-blue-100 h-7 px-2"
+              onClick={() => navigate("/commodities")}
+            >
+              <X className="w-3.5 h-3.5 mr-1" />
+              Clear filter
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Filters */}
+      <section className="bg-white border-b border-slate-200 py-6">
+        <div className="container max-w-6xl mx-auto px-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Input
               placeholder="Search commodities..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="bg-stone-50 flex-1"
+              className="bg-slate-50"
             />
             <Select
               value={categoryFilter || "all"}
               onValueChange={(v) => setCategoryFilter(v === "all" ? "" : v)}
             >
-              <SelectTrigger className="bg-stone-50 w-full sm:w-48">
+              <SelectTrigger className="bg-slate-50">
                 <SelectValue placeholder="All Categories" />
               </SelectTrigger>
               <SelectContent>
@@ -82,59 +117,53 @@ export default function Commodities() {
                 ))}
               </SelectContent>
             </Select>
+            <Button className="bg-blue-600 hover:bg-blue-700">Apply Filters</Button>
           </div>
         </div>
       </section>
 
-      {/* ── Grid ── */}
+      {/* Commodities Grid */}
       <section className="py-8">
-        <div className="max-w-6xl mx-auto px-4">
+        <div className="container max-w-6xl mx-auto px-4">
           {isLoading ? (
-            <CommoditySkeleton />
+            <div className="text-center py-12 text-slate-500">Loading commodities...</div>
           ) : filteredCommodities.length === 0 ? (
-            <div className="text-center py-20">
-              <AlertCircle className="w-10 h-10 text-stone-300 mx-auto mb-3" />
-              <p className="text-stone-500 font-medium">No commodities found</p>
-              <p className="text-stone-400 text-sm mt-1">
-                Try adjusting your search or category filter
-              </p>
+            <div className="text-center py-12">
+              <AlertCircle className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+              <p className="text-slate-500">No commodities found matching your search</p>
             </div>
           ) : (
             <>
-              <p className="text-sm text-stone-500 mb-4">
-                {filteredCommodities.length} commodit{filteredCommodities.length !== 1 ? "ies" : "y"} found
+              <p className="text-sm text-slate-500 mb-4">
+                {filteredCommodities.length} commodit
+                {filteredCommodities.length !== 1 ? "ies" : "y"} found
               </p>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                 {filteredCommodities.map((commodity) => (
                   <Card
                     key={commodity.id}
-                    className="hover:shadow-md transition-all duration-200 cursor-pointer border-stone-200 bg-white group"
-                    onClick={() => navigate(`/commodities/${commodity.id}`)}
+                    className="hover:shadow-md transition-shadow"
                   >
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between gap-2">
-                        <CardTitle className="text-base font-semibold text-stone-900 group-hover:text-amber-700 transition-colors">
-                          {commodity.name}
-                        </CardTitle>
-                        {commodity.category && (
-                          <span className="flex items-center gap-1 text-xs bg-amber-50 text-amber-700 border border-amber-100 rounded-full px-2 py-0.5 flex-shrink-0 font-medium">
-                            <Tag className="w-2.5 h-2.5" />
-                            {commodity.category}
-                          </span>
-                        )}
-                      </div>
+                    <CardHeader>
+                      <CardTitle className="text-lg">{commodity.name}</CardTitle>
+                      {commodity.category && (
+                        <CardDescription>{commodity.category}</CardDescription>
+                      )}
                     </CardHeader>
-                    <CardContent className="pt-0">
+                    <CardContent className="space-y-4">
                       <Button
-                        variant="ghost"
-                        className="w-full justify-between text-stone-600 hover:text-amber-700 hover:bg-amber-50 text-sm h-9 px-3 group-hover:bg-amber-50 transition-colors"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/commodities/${commodity.id}`);
-                        }}
+                        variant="outline"
+                        className="w-full"
+                        onClick={() =>
+                          navigate(
+                            `/commodities/${commodity.id}${
+                              marketId ? `?marketId=${marketId}` : ""
+                            }`
+                          )
+                        }
                       >
-                        View prices & vendors
-                        <ArrowRight className="w-4 h-4" />
+                        View Prices & History
                       </Button>
                     </CardContent>
                   </Card>

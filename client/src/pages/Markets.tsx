@@ -4,11 +4,13 @@ import { Input } from "@/components/ui/input";
 import { MapPin, AlertCircle } from "lucide-react";
 import { trpc } from "@/lib/trpc";
 import { useState } from "react";
+import { useLocation } from "wouter";
 import RotationalMarketCalculator from "@/components/RotationalMarketCalculator";
 
 export default function Markets() {
   const [cityFilter, setCityFilter] = useState("");
   const [stateFilter, setStateFilter] = useState("");
+  const [, navigate] = useLocation();
 
   const { data: markets = [], isLoading } = trpc.markets.list.useQuery({
     city: cityFilter || undefined,
@@ -25,10 +27,10 @@ export default function Markets() {
         </div>
       </header>
 
-      {/* Filters */}
+      {/* Filters - Live filtering (no Apply button needed) */}
       <section className="bg-white border-b border-slate-200 py-6">
         <div className="container max-w-6xl mx-auto px-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
               placeholder="Search by city..."
               value={cityFilter}
@@ -41,8 +43,10 @@ export default function Markets() {
               onChange={(e) => setStateFilter(e.target.value)}
               className="bg-slate-50"
             />
-            <Button className="bg-blue-600 hover:bg-blue-700">Apply Filters</Button>
           </div>
+          <p className="text-xs text-slate-500 mt-2">
+            Filters update automatically as you type
+          </p>
         </div>
       </section>
 
@@ -84,7 +88,6 @@ export default function Markets() {
                   </CardHeader>
 
                   <CardContent className="space-y-4">
-                    {/* Location */}
                     {market.latitude && market.longitude && (
                       <div className="text-sm text-slate-600">
                         <span className="font-medium text-slate-700">Location: </span>
@@ -92,25 +95,28 @@ export default function Markets() {
                       </div>
                     )}
 
-                    {/* Rotational market calculator */}
                     {market.marketType === "rotational" &&
                       market.cycleLength &&
                       market.cyclePosition &&
                       market.referenceDate ? (
-                        <RotationalMarketCalculator
-                          cycleLength={market.cycleLength}
-                          cyclePosition={market.cyclePosition}
-                          referenceDate={market.referenceDate}
-                        />
-                      ) : market.marketType === "daily" ? (
-                        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
-                          <p className="text-sm font-medium text-green-800">
-                            ✓ Open every day
-                          </p>
-                        </div>
-                      ) : null}
+                      <RotationalMarketCalculator
+                        cycleLength={market.cycleLength}
+                        cyclePosition={market.cyclePosition}
+                        referenceDate={market.referenceDate}
+                      />
+                    ) : market.marketType === "daily" ? (
+                      <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3">
+                        <p className="text-sm font-medium text-green-800">
+                          ✓ Open every day
+                        </p>
+                      </div>
+                    ) : null}
 
-                    <Button variant="outline" className="w-full">
+                    <Button
+                      variant="outline"
+                      className="w-full"
+                      onClick={() => navigate(`/commodities?marketId=${market.id}`)}
+                    >
                       View Commodities & Prices
                     </Button>
                   </CardContent>
