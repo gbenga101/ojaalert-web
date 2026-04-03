@@ -28,6 +28,7 @@ import {
   AlertCircle,
   ChevronDown,
   ChevronUp,
+  MapPin,
   Package,
   Pencil,
   Plus,
@@ -313,10 +314,12 @@ function AddProductForm({
 /** Expandable store card with product list and add-product form */
 function StoreCard({
   store,
+  markets,
   commodities,
   units,
 }: {
   store: { id: string; storeName: string; marketId: string; description?: string | null };
+  markets: { id: string; name: string; city: string }[];
   commodities: { id: string; name: string }[];
   units: { id: string; name: string }[];
 }) {
@@ -325,6 +328,10 @@ function StoreCard({
 
   const { data: products = [], isLoading: productsLoading } =
     trpc.vendorProducts.listByStore.useQuery(store.id, { enabled: expanded });
+
+  // Resolve market name from the markets list passed down from parent
+  const market = markets.find((m) => m.id === store.marketId);
+  const marketLabel = market ? `${market.name} — ${market.city}` : "Unknown market";
 
   return (
     <Card className="border border-slate-200">
@@ -338,8 +345,9 @@ function StoreCard({
             <Store className="w-5 h-5 text-blue-600 shrink-0" />
             <div>
               <CardTitle className="text-base">{store.storeName}</CardTitle>
-              <CardDescription className="text-xs mt-0.5">
-                Market ID: {store.marketId}
+              <CardDescription className="text-xs mt-0.5 flex items-center gap-1">
+                <MapPin className="w-3 h-3" />
+                {marketLabel}
               </CardDescription>
             </div>
           </div>
@@ -393,7 +401,10 @@ function StoreCard({
               variant="outline"
               size="sm"
               className="w-full mt-2 border-dashed"
-              onClick={() => setShowAddProduct(true)}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowAddProduct(true);
+              }}
             >
               <Plus className="w-4 h-4 mr-1" />
               Add Product
@@ -410,7 +421,7 @@ function StoreCard({
 export default function VendorDashboard() {
   const { user, isAuthenticated } = useAuth();
 
-  // Global data
+  // Global data — markets already fetched here, passed down to StoreCard
   const { data: commodities = [] } = trpc.commodities.list.useQuery({});
   const { data: units = [] } = trpc.units.list.useQuery();
   const { data: markets = [] } = trpc.markets.list.useQuery({});
@@ -697,6 +708,7 @@ export default function VendorDashboard() {
                     <StoreCard
                       key={store.id}
                       store={store}
+                      markets={markets}
                       commodities={commodities}
                       units={units}
                     />
