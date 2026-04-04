@@ -29,13 +29,13 @@ export default function Home() {
       icon: <TrendingUp className="w-8 h-8 text-green-600 mb-2" />,
       title: "Price Trends",
       description: "Track commodity price changes over time",
-      href: "/commodities",
+      href: "/trends",
     },
     {
       icon: <ShoppingCart className="w-8 h-8 text-orange-600 mb-2" />,
       title: "Price Comparison",
       description: "Compare prices across vendors and markets",
-      href: "/commodities",
+      href: "/compare",
     },
     {
       icon: <Users className="w-8 h-8 text-purple-600 mb-2" />,

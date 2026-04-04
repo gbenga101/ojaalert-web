@@ -197,7 +197,8 @@ export const appRouter = router({
   }),
 
   priceReports: router({
-    create: publicProcedure
+    // Only logged-in users can submit price reports
+    create: protectedProcedure
       .input(
         z.object({
           vendorProductId: z.string().min(1),
