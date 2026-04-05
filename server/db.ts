@@ -178,10 +178,7 @@ export async function getCommodityWithVendorPrices(commodityId: string) {
 
 /**
  * Returns price history for all vendor products of a given commodity.
- *
- * Averages multiple entries per (vendor, day) into a single data point
- * so the chart gets one clean value per vendor per day.
- *
+ * Averages multiple entries per (vendor, day) into a single data point.
  * Returns rows ordered by date ASC — ready for Recharts.
  */
 export async function getPriceHistoryForCommodity(commodityId: string) {
@@ -233,6 +230,7 @@ export async function getPriceHistoryForCommodity(commodityId: string) {
 }
 
 // ─── Units queries ────────────────────────────────────────────────────────────
+
 export async function getUnits() {
   const db = await getDb();
   if (!db) return [];
@@ -260,6 +258,73 @@ export async function createVendor(data: {
   const { vendors } = await import("../drizzle/schema");
   const result = await db.insert(vendors).values(data).returning();
   return result[0];
+}
+
+/**
+ * Public vendor directory — one row per store.
+ * Joins vendors → vendor_stores → markets, counts products per store.
+ * Phone number is only returned when verificationStatus = 'approved'.
+ */
+export async function getVendorDirectory() {
+  const db = await getDb();
+  if (!db) return [];
+
+  const result = await db.execute(sql`
+    SELECT
+      v.id                    AS vendor_id,
+      v.owner_name            AS owner_name,
+      v.verification_status   AS verification_status,
+      CASE WHEN v.verification_status = 'approved'
+        THEN v.phone_number
+        ELSE NULL
+      END                     AS phone_number,
+      vs.id                   AS store_id,
+      vs.store_name           AS store_name,
+      vs.description          AS store_description,
+      m.id                    AS market_id,
+      m.name                  AS market_name,
+      m.city                  AS market_city,
+      m.state                 AS market_state,
+      m.market_type           AS market_type,
+      COUNT(vp.id)::int       AS product_count
+    FROM vendors v
+    JOIN vendor_stores vs        ON vs.vendor_id       = v.id
+    JOIN markets m               ON m.id               = vs.market_id
+    LEFT JOIN vendor_products vp ON vp.vendor_store_id = vs.id
+    GROUP BY
+      v.id,
+      v.owner_name,
+      v.verification_status,
+      v.phone_number,
+      vs.id,
+      vs.store_name,
+      vs.description,
+      m.id,
+      m.name,
+      m.city,
+      m.state,
+      m.market_type
+    ORDER BY v.owner_name ASC, vs.store_name ASC
+  `);
+
+  return result.rows.map((row) => {
+    const r = row as Record<string, unknown>;
+    return {
+      vendorId:           r.vendor_id as string,
+      ownerName:          r.owner_name as string,
+      verificationStatus: r.verification_status as string | null,
+      phoneNumber:        r.phone_number as string | null,
+      storeId:            r.store_id as string,
+      storeName:          r.store_name as string,
+      storeDescription:   r.store_description as string | null,
+      marketId:           r.market_id as string,
+      marketName:         r.market_name as string,
+      marketCity:         r.market_city as string | null,
+      marketState:        r.market_state as string | null,
+      marketType:         r.market_type as string | null,
+      productCount:       r.product_count as number,
+    };
+  });
 }
 
 // ─── Vendor Stores queries ────────────────────────────────────────────────────

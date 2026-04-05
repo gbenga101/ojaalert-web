@@ -11,20 +11,18 @@ import Commodities from "./pages/Commodities";
 import CommodityDetail from "./pages/CommodityDetail";
 import PriceHistoryDetail from "./pages/PriceHistoryDetail";
 import VendorDashboard from "./pages/VendorDashboard";
-import Trends from "./pages/Trends";
-import Compare from "./pages/Compare";
+import VendorDirectory from "./pages/VendorDirectory";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/markets" component={Markets} />
-      <Route path="/trends" component={Trends} />
-      <Route path="/compare" component={Compare} />
       <Route path="/commodities" component={Commodities} />
       <Route path="/commodities/:id/history" component={PriceHistoryDetail} />
       <Route path="/commodities/:id" component={CommodityDetail} />
       <Route path="/vendor" component={VendorDashboard} />
+      <Route path="/vendors" component={VendorDirectory} />
       <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>

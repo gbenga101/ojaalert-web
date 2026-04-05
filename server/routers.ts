@@ -94,6 +94,11 @@ export const appRouter = router({
   }),
 
   vendors: router({
+    // Public vendor directory — no login required
+    directory: publicProcedure.query(async () => {
+      return await db.getVendorDirectory();
+    }),
+
     me: protectedProcedure.query(async ({ ctx }) => {
       return await db.getVendorByProfileId(ctx.user.id);
     }),
@@ -190,7 +195,7 @@ export const appRouter = router({
       .input(z.string().min(1))
       .query(async ({ input }) => await db.getPriceHistory(input)),
 
-    // New — all vendor price history for a commodity, used by the chart
+    // All vendor price history for a commodity, used by the chart
     getByCommodity: publicProcedure
       .input(z.string().min(1))
       .query(async ({ input }) => await db.getPriceHistoryForCommodity(input)),
